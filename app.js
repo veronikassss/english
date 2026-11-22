@@ -1810,8 +1810,8 @@ function bindEvents() {
       if (action === "open-audio-check") { state.showAudioCheck = true; state.lastAudioCheckResult = ""; render(); }
       if (action === "close-audio-check") { state.showAudioCheck = false; render(); }
       if (action === "audio-reset") resetAudioEngine();
-      if (action === "audio-check-correct") { state.lastAudioCheckResult = "Звук понятный: ты услышала kitten."; render(); }
-      if (action === "audio-check-wrong") { state.lastAudioCheckResult = "Похоже, звук был непонятный. Нажми «Перезапустить голос» и попробуй ещё раз."; render(); }
+      if (action === "audio-check-correct") { state.lastAudioCheckResult = "Звук понятный: ты услышала a lion."; render(); }
+      if (action === "audio-check-wrong") { state.lastAudioCheckResult = "Это был a lion. Нажми «Проиграть ещё раз» и послушай ещё раз."; render(); }
       if (action === "close-achievement") { state.modalAchievementId = null; render(); }
       if (action === "check-fill") checkFill();
       if (action === "check-free-text") checkFreeText();
@@ -3124,4 +3124,343 @@ function checkMulti() {
     if (!state.selectedScene && !state.sceneCompletedView) state.selectedWorldId = 'map';
     render();
   });
+})();
+
+
+// v32: fully stored audio. No browser speechSynthesis is used for game audio.
+(function applyStoredAudioV32(){
+  let currentStoredAudio = null;
+  let audioUnlocked = false;
+
+  function normalizeAudioKey(value) {
+    return String(value || "")
+      .trim()
+      .replace(/[“”„]/g, '"')
+      .replace(/[’]/g, "'")
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/g, "")
+      .toLowerCase();
+  }
+
+  function buildAudioIndex(group) {
+    const exact = window.AUDIO_ASSETS?.[group] || {};
+    const normalized = new Map();
+    Object.entries(exact).forEach(([text, src]) => {
+      const key = normalizeAudioKey(text);
+      if (key && !normalized.has(key)) normalized.set(key, src);
+    });
+    return { exact, normalized };
+  }
+
+  const learningAudioIndex = buildAudioIndex("learning");
+  const lexAudioIndex = buildAudioIndex("lex");
+
+  function resolveStoredAudio(group, text) {
+    const index = group === "lex" ? lexAudioIndex : learningAudioIndex;
+    const raw = String(text || "").trim();
+    return index.exact[raw] || index.normalized.get(normalizeAudioKey(raw)) || "";
+  }
+
+  function stopStoredAudio() {
+    if (!currentStoredAudio) return;
+    try {
+      currentStoredAudio.pause();
+      currentStoredAudio.currentTime = 0;
+    } catch {}
+    currentStoredAudio = null;
+  }
+
+  function playStoredAudio(group, text, { quietMissing = false } = {}) {
+    const src = resolveStoredAudio(group, text);
+    if (!src) {
+      if (!quietMissing) {
+        state.feedback = group === "lex"
+          ? "Для этой реплики Лекса пока нет сохранённой записи."
+          : "Для этой фразы пока нет сохранённой записи.";
+        render();
+      }
+      return false;
+    }
+
+    stopStoredAudio();
+    const audio = new Audio(src);
+    currentStoredAudio = audio;
+    audio.preload = "auto";
+    audio.volume = 1;
+    audio.onended = () => {
+      if (currentStoredAudio === audio) currentStoredAudio = null;
+    };
+    audio.onerror = () => {
+      if (currentStoredAudio === audio) currentStoredAudio = null;
+      if (!quietMissing) {
+        state.feedback = "Не получилось воспроизвести запись. Нажми 🔊 ещё раз.";
+        render();
+      }
+    };
+    const promise = audio.play();
+    if (promise?.catch) {
+      promise.catch(() => {
+        if (currentStoredAudio === audio) currentStoredAudio = null;
+        if (!quietMissing) {
+          state.feedback = "Браузер не запустил звук. Нажми 🔊 ещё раз.";
+          render();
+        }
+      });
+    }
+    return true;
+  }
+
+  // A user interaction unlocks ordinary browser audio playback.
+  document.addEventListener("pointerdown", () => { audioUnlocked = true; }, { capture: true, once: true });
+  document.addEventListener("keydown", () => { audioUnlocked = true; }, { capture: true, once: true });
+
+  // Replace all educational TTS with pre-generated Jenny MP3s.
+  speakEnglish = function speakEnglishStoredV32(text) {
+    const cleaned = String(text || "").trim();
+    if (!cleaned) return;
+    playStoredAudio("learning", cleaned);
+  };
+
+  // Lex gets his own stored Eugene voice. New Lex messages speak automatically after user interaction.
+  const originalAddLexMessageV32 = addLexMessage;
+  addLexMessage = function addLexMessageStoredV32(text, options = {}) {
+    ensureLexArrays();
+    const before = state.progress.lexMessages.length;
+    const cleanText = cleanLexText(text);
+    originalAddLexMessageV32(text, options);
+    const after = state.progress.lexMessages.length;
+    const isLex = (options.speaker || "lex") !== "user";
+    if (isLex && cleanText && after > before && audioUnlocked) {
+      playStoredAudio("lex", cleanText, { quietMissing: true });
+    }
+  };
+
+  // Render a replay speaker on every stored Lex message.
+  renderLexDialog = function renderLexDialogStoredV32() {
+    ensureLexArrays();
+    const messages = state.progress.lexMessages || [];
+    const visibleMessages = messages.slice(-8);
+    return `
+      <section class="lex-dialog-panel" aria-label="Lex dialog">
+        <div class="lex-dialog-head">
+          <div class="lex-face">🦊</div>
+          <div>
+            <p class="small-label">Buddy dialog</p>
+            <h2>Лекс рядом</h2>
+          </div>
+          <div class="lex-head-actions">
+            <button class="lex-sound-button" data-action="open-audio-check" title="Проверить звук">🔊</button>
+            <button class="lex-clear-button" data-action="clear-lex" title="Очистить диалог">↺</button>
+          </div>
+        </div>
+        <div class="lex-dialog-scroll" id="lexDialogScroll">
+          ${visibleMessages.map((message) => {
+            const isLex = message.speaker !== "user";
+            const hasAudio = isLex && Boolean(resolveStoredAudio("lex", message.text));
+            return `
+              <div class="lex-message ${message.speaker === "user" ? "from-user" : "from-lex"}">
+                <div class="lex-message-topline">
+                  <span>${message.speaker === "user" ? "Ты" : "🦊 Лекс"}</span>
+                  ${hasAudio ? `<button class="lex-message-audio" data-lex-speak="${escapeHtml(message.text)}" title="Послушать Лекса ещё раз">🔊</button>` : ""}
+                </div>
+                <p>${escapeHtml(message.text)}</p>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        ${state.lexChoices.length ? `
+          <div class="lex-choice-row">
+            ${state.lexChoices.map((choice) => `<button class="lex-choice-button" data-lex-choice-id="${escapeHtml(choice.id)}">${escapeHtml(choice.label)}</button>`).join("")}
+          </div>
+        ` : ``}
+      </section>
+    `;
+  };
+
+  // Sound check now tests an actual stored game file rather than speechSynthesis.
+  renderAudioCheckModal = function renderAudioCheckModalStoredV32() {
+    return `
+      <div class="modal-backdrop">
+        <section class="modal-card audio-check-card">
+          <p class="small-label">Sound check</p>
+          <h2>Проверка звука</h2>
+          <p class="rule-text">Нажми «Listen» и выбери, что услышала. Это сохранённая запись из игры, поэтому она должна звучать одинаково каждый раз.</p>
+          <div class="audio-check-word">
+            <button class="listen-button" data-speak="a lion">🔊 Listen: a lion</button>
+          </div>
+          <div class="choice-grid audio-check-grid">
+            <button class="choice-card" data-action="audio-check-correct"><span class="choice-image">🦁</span><strong>lion</strong><small>лев</small></button>
+            <button class="choice-card" data-action="audio-check-wrong"><span class="choice-image">🐶</span><strong>dog</strong><small>собака</small></button>
+          </div>
+          ${state.lastAudioCheckResult ? `<p class="feedback-line">${escapeHtml(state.lastAudioCheckResult)}</p>` : ""}
+          <div class="modal-actions">
+            <button class="secondary-button" data-action="audio-reset">Проиграть ещё раз</button>
+            <button class="primary-button" data-action="close-audio-check">Готово</button>
+          </div>
+        </section>
+      </div>
+    `;
+  };
+
+  resetAudioEngine = function resetAudioEngineStoredV32() {
+    stopStoredAudio();
+    state.lastAudioCheckResult = "Проигрываю a lion ещё раз.";
+    render();
+    setTimeout(() => playStoredAudio("learning", "a lion"), 0);
+  };
+
+  // Replay individual Lex messages. This listener survives all rerenders.
+  document.addEventListener("click", (event) => {
+    const lexButton = event.target.closest?.("[data-lex-speak]");
+    if (!lexButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    audioUnlocked = true;
+    playStoredAudio("lex", lexButton.dataset.lexSpeak);
+  }, true);
+
+  // Expose tiny diagnostics for development without showing XP/internal state.
+  window.EnglishKidsAudio = {
+    learningCount: Object.keys(learningAudioIndex.exact).length,
+    lexCount: Object.keys(lexAudioIndex.exact).length,
+    hasLearning: (text) => Boolean(resolveStoredAudio("learning", text)),
+    hasLex: (text) => Boolean(resolveStoredAudio("lex", text)),
+    stop: stopStoredAudio,
+  };
+})();
+
+// v33: calm background music with persistent toggle and automatic ducking under speech.
+(function applyBackgroundMusicV33(){
+  const MUSIC_KEY = "english-kids-background-music-enabled-v1";
+  const NORMAL_VOLUME = 0.11;
+  const DUCK_VOLUME = 0.02;
+  const FADE_MS = 260;
+
+  let musicEnabled = localStorage.getItem(MUSIC_KEY) !== "false";
+  let musicStarted = false;
+  let fadeTimer = null;
+  const activeSpeech = new Set();
+
+  const bgMusic = new Audio("background-music.mp3");
+  bgMusic.loop = true;
+  bgMusic.preload = "auto";
+  bgMusic.volume = NORMAL_VOLUME;
+
+  function fadeMusicTo(target, duration = FADE_MS) {
+    if (!musicStarted || bgMusic.paused) {
+      bgMusic.volume = target;
+      return;
+    }
+    if (fadeTimer) cancelAnimationFrame(fadeTimer);
+    const start = performance.now();
+    const from = bgMusic.volume;
+    const delta = target - from;
+
+    function step(now) {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      bgMusic.volume = Math.max(0, Math.min(1, from + delta * eased));
+      if (p < 1) fadeTimer = requestAnimationFrame(step);
+      else fadeTimer = null;
+    }
+    fadeTimer = requestAnimationFrame(step);
+  }
+
+  function targetMusicVolume() {
+    return activeSpeech.size ? DUCK_VOLUME : NORMAL_VOLUME;
+  }
+
+  function startMusic() {
+    if (!musicEnabled) return;
+    bgMusic.volume = targetMusicVolume();
+    const p = bgMusic.play();
+    if (p?.then) {
+      p.then(() => { musicStarted = true; }).catch(() => {
+        // Browsers can block audio until a user gesture. The next gesture retries.
+        musicStarted = false;
+      });
+    } else {
+      musicStarted = true;
+    }
+  }
+
+  function stopMusic() {
+    try { bgMusic.pause(); } catch {}
+    musicStarted = false;
+  }
+
+  function toggleMusic() {
+    musicEnabled = !musicEnabled;
+    localStorage.setItem(MUSIC_KEY, String(musicEnabled));
+    if (musicEnabled) startMusic();
+    else stopMusic();
+    render();
+  }
+
+  function markSpeech(media) {
+    if (!media || media === bgMusic || activeSpeech.has(media)) return;
+    activeSpeech.add(media);
+    fadeMusicTo(DUCK_VOLUME, 180);
+
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      activeSpeech.delete(media);
+      if (!activeSpeech.size && musicEnabled) fadeMusicTo(NORMAL_VOLUME, 320);
+    };
+
+    media.addEventListener("ended", done, { once: true });
+    media.addEventListener("pause", done, { once: true });
+    media.addEventListener("error", done, { once: true });
+  }
+
+  // Any stored game audio automatically lowers the music while it is speaking.
+  const nativePlay = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function(...args) {
+    if (this !== bgMusic && this.tagName === "AUDIO") markSpeech(this);
+    return nativePlay.apply(this, args);
+  };
+
+  // Start the soundtrack only after a real user gesture (browser autoplay rule).
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest?.('[data-action="toggle-music"]')) return;
+    if (musicEnabled && !musicStarted) startMusic();
+  }, { capture: true });
+  document.addEventListener("keydown", (event) => {
+    if (event.target.closest?.('[data-action="toggle-music"]')) return;
+    if (musicEnabled && !musicStarted) startMusic();
+  }, { capture: true });
+
+  // Add a music toggle beside Lex's sound-check button.
+  const previousRenderLexDialogV33 = renderLexDialog;
+  renderLexDialog = function renderLexDialogWithMusicV33() {
+    const html = previousRenderLexDialogV33();
+    const icon = musicEnabled ? "🎵" : "🔇";
+    const title = musicEnabled ? "Выключить фоновую музыку" : "Включить фоновую музыку";
+    const cls = musicEnabled ? "" : " off";
+    return html.replace(
+      '<div class="lex-head-actions">',
+      `<div class="lex-head-actions"><button class="lex-sound-button music-toggle${cls}" data-action="toggle-music" title="${title}" aria-label="${title}">${icon}</button>`
+    );
+  };
+
+  // Delegated listener survives all app rerenders.
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.('[data-action="toggle-music"]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleMusic();
+  }, true);
+
+  window.EnglishKidsMusic = {
+    element: bgMusic,
+    get enabled() { return musicEnabled; },
+    start: startMusic,
+    stop: stopMusic,
+    toggle: toggleMusic,
+    normalVolume: NORMAL_VOLUME,
+    duckVolume: DUCK_VOLUME,
+  };
 })();
