@@ -2974,10 +2974,28 @@ function checkMulti() {
     [12, 116], [42, 118], [72, 118], [28, 140], [60, 142]
   ];
 
+  const DAY_ONE_FINAL_SCENES_V40 = {
+    school: 'school-final-review',
+    cafe: 'cafe-close-day',
+    park: 'park-final',
+    playground: 'playground-go-home',
+    zoo: 'zoo-guide-final',
+  };
+
   function isAllDayOneCompleteV39(){
-    return Object.values(REQUIRED_DAY_ONE_V29).every((sceneIds)=>
-      sceneIds.every((sceneId)=>state.progress.completedSceneIds.includes(sceneId))
-    );
+    const completed = state.progress.completedSceneIds || [];
+    const finalScenesDone = Object.values(DAY_ONE_FINAL_SCENES_V40)
+      .every((sceneId)=>completed.includes(sceneId));
+
+    const completedWorlds = Array.isArray(state.progress.completedDayWorldIds)
+      ? state.progress.completedDayWorldIds
+      : [];
+    const recordedWorldsDone = Object.keys(DAY_ONE_FINAL_SCENES_V40)
+      .every((worldId)=>completedWorlds.includes(worldId));
+
+    // Use the real end-of-day anchors. This also repairs old saved progress
+    // where the duplicated required-scene list became stale after world edits.
+    return finalScenesDone || recordedWorldsDone;
   }
 
   function syncDayOneHomeStateV39(){

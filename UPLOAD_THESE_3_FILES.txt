@@ -1,0 +1,9 @@
+V40 FINAL TRIGGER FIX
+
+Upload these 3 files to the ROOT of the GitHub repository and replace the old ones:
+- app.js
+- index.html
+- 404.html
+
+Do not reset progress. After Ctrl+F5, existing completed Day 1 progress is re-checked.
+If the five final Day 1 scenes are already completed, the Home ending appears automatically.
