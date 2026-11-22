@@ -20,6 +20,11 @@ const defaultProgress = {
   lexMessages: [],
   lexSeenEventIds: [],
   seenSceneGrammarFlowIds: [],
+  completedDayWorldIds: [],
+  dayOneAllComplete: false,
+  homeUnlocked: false,
+  homeVisited: false,
+  dayOneHomePromptDismissed: false,
 };
 
 const loadedProgress = loadProgress();
@@ -54,6 +59,7 @@ const state = {
   skipLexAfterGrammar: false,
   showAudioCheck: false,
   lastAudioCheckResult: "",
+  showDayOneHomePrompt: false,
 };
 
 function loadProgress() {
@@ -2909,8 +2915,33 @@ function checkMulti() {
     const worldId = scene?.worldId;
     if (!worldId || !dayOneRequiredByWorldV28[worldId]) return;
     if (!Array.isArray(state.progress.completedDayWorldIds)) state.progress.completedDayWorldIds = [];
+
+    let justFinishedWorld = false;
     if (isWorldDayOneCompleteV28(worldId) && !state.progress.completedDayWorldIds.includes(worldId)) {
       state.progress.completedDayWorldIds.push(worldId);
+      justFinishedWorld = true;
+    }
+
+    const allDayOneComplete = Object.keys(dayOneRequiredByWorldV28)
+      .every((id)=>isWorldDayOneCompleteV28(id));
+
+    if (allDayOneComplete) {
+      const firstGlobalFinish = !state.progress.dayOneAllComplete;
+      state.progress.dayOneAllComplete = true;
+      state.progress.homeUnlocked = true;
+      if (firstGlobalFinish) {
+        state.progress.dayOneHomePromptDismissed = false;
+        state.showDayOneHomePrompt = true;
+        // The global Day 1 ending replaces the last ordinary world-complete toast.
+        state.toastMessage = '';
+        saveProgress();
+        render();
+        return;
+      }
+      saveProgress();
+    }
+
+    if (justFinishedWorld) {
       state.toastMessage = `Поздравляю! Ты прожил целый день в ${worldRuV28[worldId] || worldId}, чтобы начать новый день нужно пройти первые дни во всех мирах. Удачи!`;
       saveProgress();
       render();
@@ -2931,8 +2962,8 @@ function checkMulti() {
 
   const REQUIRED_DAY_ONE_V29 = {
     school: ['school-pack-bag','school-get-to-school','school-schedule','school-collision','school-meet-classmates','school-team','school-final-review'],
-    cafe: ['cafe-find-snack','cafe-make-fruit-pizza','cafe-meet-visitors','cafe-look-visitors','cafe-serve-tables'],
-    park: ['park-walk','park-many-things','park-meet-ben','park-help-ben','park-team'],
+    cafe: ['cafe-find-snack','cafe-make-fruit-pizza','cafe-meet-visitors','cafe-look-visitors','cafe-serve-tables','cafe-close-day'],
+    park: ['park-walk','park-many-things','park-meet-ben','park-help-ben','park-team','park-final'],
     playground: ['playground-look-toys','playground-count-toys','playground-colors','playground-describe-kids','playground-about-me','playground-draw-groups','playground-go-home'],
     zoo: ['zoo-open-enclosures','zoo-animal-pairs','zoo-meet-keeper','zoo-look-keeper','zoo-look-animal-groups','zoo-guide-final'],
   };
@@ -2942,6 +2973,66 @@ function checkMulti() {
     [8, 68], [38, 68], [68, 70], [22, 90], [52, 92], [78, 94],
     [12, 116], [42, 118], [72, 118], [28, 140], [60, 142]
   ];
+
+  function isAllDayOneCompleteV39(){
+    return Object.values(REQUIRED_DAY_ONE_V29).every((sceneIds)=>
+      sceneIds.every((sceneId)=>state.progress.completedSceneIds.includes(sceneId))
+    );
+  }
+
+  function syncDayOneHomeStateV39(){
+    if (!isAllDayOneCompleteV39()) return;
+    const changed = !state.progress.dayOneAllComplete || !state.progress.homeUnlocked;
+    state.progress.dayOneAllComplete = true;
+    state.progress.homeUnlocked = true;
+    if (changed) saveProgress();
+    if (!state.progress.homeVisited && !state.progress.dayOneHomePromptDismissed) {
+      state.showDayOneHomePrompt = true;
+    }
+  }
+
+  function renderDayOneHomePromptV39(){
+    return `
+      <div class="modal-backdrop day-one-home-backdrop">
+        <section class="modal-card day-one-home-prompt">
+          <div class="day-one-home-moon">🌙</div>
+          <p class="small-label">Day 1 complete</p>
+          <h2>Первый день закончен!</h2>
+          <p>Ты прожил первый день во всех мирах. Столько всего успел — теперь пора немного передохнуть.</p>
+          <p class="day-one-home-soft">Лекс уже ждёт дома. Возвращаемся?</p>
+          <div class="modal-actions day-one-home-actions">
+            <button class="secondary-button" data-action="day-one-home-later">Потом</button>
+            <button class="primary-button" data-action="go-home">🏠 Домой</button>
+          </div>
+        </section>
+      </div>`;
+  }
+
+  function renderDayOneHomeV39(){
+    return `
+      <section class="day-one-home-panel">
+        <div class="day-one-home-head">
+          <button class="back-to-map-button" data-action="back-to-map">← К карте миров</button>
+          <div>
+            <p class="small-label">Home · Day 1</p>
+            <h2>🌙 Наконец-то дома</h2>
+            <p>Первый день во всех мирах закончен. Сегодня больше ничего не нужно выполнять — просто отдыхай.</p>
+          </div>
+          <span class="day-one-finished-badge">✓ День 1 завершён</span>
+        </div>
+        <div class="day-one-room-frame">
+          <img src="${escapeHtml(asset('home-day1-room.png'))}" alt="Уютная комната вечером, Лекс отдыхает после первого дня" />
+          <div class="day-one-room-caption">
+            <span class="room-lex-icon">🦊</span>
+            <div>
+              <strong>Лекс</strong>
+              <p>Фух! Вот это был день. Мы столько всего увидели и выучили! Давай сегодня просто отдохнём. Завтра продолжим наши приключения.</p>
+            </div>
+          </div>
+        </div>
+        <p class="day-one-room-note">За окном уже ночь. В комнате остались знакомые вещи из сегодняшних приключений.</p>
+      </section>`;
+  }
 
   function achievementByIdV29(id){ return achievements.find((item)=>item.id===id); }
 
@@ -3011,7 +3102,10 @@ function checkMulti() {
             <h2>Карта миров</h2>
             <p>Выбирай любой мир и проходи первый день приключения.</p>
           </div>
-          <span class="all-open-badge">✨ Все основные миры открыты</span>
+          <div class="map-home-actions">
+            <span class="all-open-badge">✨ Все основные миры открыты</span>
+            ${state.progress.homeUnlocked ? '<button class="home-map-button" data-action="go-home">🏠 Дом</button>' : ''}
+          </div>
         </div>
         <div class="world-blob-map ${canShowWorld(worlds.find((w)=>w.id==='vocabulary')) ? '' : 'vocab-not-yet-visible'}" aria-label="Карта миров">
           ${allWorlds.map(renderWorldMapButtonV29).join('')}
@@ -3091,6 +3185,7 @@ function checkMulti() {
     if (state.sceneCompletedView) return renderSceneCompleted();
     if (state.selectedScene) return renderSceneScreen();
     if (!state.selectedWorldId || state.selectedWorldId === 'map') return renderMapHomeV29();
+    if (state.selectedWorldId === 'home' && state.progress.homeUnlocked) return renderDayOneHomeV39();
     const visibleWorlds = worlds.filter(canShowWorld);
     const selectedWorld = visibleWorlds.find((world)=>world.id===state.selectedWorldId);
     if (!selectedWorld) { state.selectedWorldId = 'map'; return renderMapHomeV29(); }
@@ -3100,6 +3195,7 @@ function checkMulti() {
   function renderV29(){
     ensureLexIntro();
     maybeShowZooWakeToast();
+    syncDayOneHomeStateV39();
     const app = document.getElementById('app');
     app.innerHTML = `
       <div class="adventure-shell">
@@ -3115,6 +3211,7 @@ function checkMulti() {
         ${state.showAchievementsModal ? renderAchievementsModal() : ''}
         ${state.showBuddyModal ? renderBuddyModal() : ''}
         ${state.showAudioCheck ? renderAudioCheckModal() : ''}
+        ${state.showDayOneHomePrompt ? renderDayOneHomePromptV39() : ''}
         <button class="ghost-button reset-floating" data-action="reset">Сбросить прогресс</button>
       </div>
     `;
@@ -3136,12 +3233,35 @@ function checkMulti() {
         render();
       });
     });
+    document.querySelectorAll('[data-action="go-home"]').forEach((button)=>{
+      button.addEventListener('click', ()=>{
+        state.progress.homeUnlocked = true;
+        state.progress.homeVisited = true;
+        state.progress.dayOneHomePromptDismissed = true;
+        state.showDayOneHomePrompt = false;
+        state.toastMessage = '';
+        state.selectedWorldId = 'home';
+        state.selectedScene = null;
+        state.sceneCompletedView = null;
+        saveProgress();
+        render();
+      });
+    });
+    document.querySelectorAll('[data-action="day-one-home-later"]').forEach((button)=>{
+      button.addEventListener('click', ()=>{
+        state.progress.dayOneHomePromptDismissed = true;
+        state.showDayOneHomePrompt = false;
+        saveProgress();
+        render();
+      });
+    });
   };
 
   const previousResetProgressV29 = resetProgress;
   resetProgress = function resetProgressV29(){
     previousResetProgressV29();
     state.selectedWorldId = 'map';
+    state.showDayOneHomePrompt = false;
     render();
   };
 
