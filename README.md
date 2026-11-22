@@ -18,3 +18,12 @@
 Распакуйте ZIP и загрузите **все файлы из папки** в корень GitHub-репозитория. Не загружайте сам ZIP как единственный файл.
 
 После Commit changes подождите обновления GitHub Pages и откройте сайт с `Ctrl + F5`.
+
+
+## v34 fixes
+- Vocabulary Garden now reveals only vocabulary whose vocab card has actually been unlocked.
+- Fixed School: 3 pencils -> three pencils is the correct answer.
+- Selected-world maps expand vertically so later missions remain reachable in every world.
+- Get to school / Find English class positions swapped on the School map as requested.
+- Added 43 missing plural audio records.
+- Replaced 53 mixed Russian/English Lex recordings with corrected versions.

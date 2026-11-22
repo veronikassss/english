@@ -1721,3 +1721,4 @@ body {
   opacity: .58;
   filter: grayscale(.25);
 }
+\n\n/* v34: world maps grow to fit every unlocked scene; no missions are clipped below the board. */\n.world-scene-map {\n  overflow: hidden;\n  width: 100%;\n  min-width: 0;\n}\n.world-adventure-panel { overflow: visible; }\n@media (min-width: 861px) {\n  .world-scene-map { padding-bottom: 28px; }\n}\n

@@ -11811,13 +11811,13 @@ const tasks = [
         "id": "four-pencils",
         "label": "four pencils",
         "image": "✏️✏️✏️✏️",
-        "isCorrect": true
+        "isCorrect": false
       },
       {
         "id": "three-pencils",
         "label": "three pencils",
         "image": "✏️✏️✏️",
-        "isCorrect": false
+        "isCorrect": true
       },
       {
         "id": "one-pencil",

@@ -2747,8 +2747,20 @@ function checkMulti() {
     return true;
   }
   function addVisibleV28(set, sceneId){ if (sceneByIdV28(sceneId) && canRevealSpecialV28(sceneId)) set.add(sceneId); }
+  function canShowVocabularySceneV34(scene){
+    if (!scene || scene.worldId !== 'vocabulary') return false;
+    const hasEnoughXp = state.progress.xp >= Number(scene.requiredXp || 0);
+    const hasGrammar = (scene.requiredGrammarSkillIds || []).every((skillId)=>isGrammarSkillUnlocked(skillId));
+    const hasVocab = (scene.requiredVocabCardIds || []).every((cardId)=>state.progress.seenVocabCardIds.includes(cardId));
+    const hasCompleted = (scene.requiredCompletedSceneIds || []).every((sceneId)=>state.progress.completedSceneIds.includes(sceneId));
+    const anyList = scene.requiredAnyCompletedSceneIds || [];
+    const hasAny = !anyList.length || anyList.some((sceneId)=>state.progress.completedSceneIds.includes(sceneId));
+    const hasZooRest = !scene.requiredZooRestComplete || isZooRestReady();
+    const hasLex = !scene.requiredLexEventId || state.progress.lexSeenEventIds.includes(scene.requiredLexEventId);
+    return hasEnoughXp && hasGrammar && hasVocab && hasCompleted && hasAny && hasZooRest && hasLex;
+  }
   getVisibleScenesForWorld = function getVisibleScenesForWorldV28(worldId){
-    if (worldId === 'vocabulary') return scenes.filter((scene)=>scene.worldId===worldId && canShowScene(scene));
+    if (worldId === 'vocabulary') return scenes.filter((scene)=>canShowVocabularySceneV34(scene));
     const order = orderByWorldV28[worldId] || [];
     const visibleIds = new Set();
     addVisibleV28(visibleIds, firstSceneByWorldV28[worldId]);
@@ -3006,13 +3018,20 @@ function checkMulti() {
     `;
   }
 
+  function sceneNodePositionV34(index){
+    const row = Math.floor(index / 3);
+    const col = index % 3;
+    const even = [15, 50, 84];
+    const odd = [20, 55, 80];
+    return { left: (row % 2 ? odd : even)[col], top: 125 + row * 190 };
+  }
+
   function renderSceneNodeV29(scene, index){
     const completed = state.progress.completedSceneIds.includes(scene.id);
     const required = (REQUIRED_DAY_ONE_V29[scene.worldId] || []).includes(scene.id);
-    const pos = SCENE_POSITIONS_V29[index % SCENE_POSITIONS_V29.length];
-    const rowOffset = Math.floor(index / SCENE_POSITIONS_V29.length) * 28;
+    const pos = sceneNodePositionV34(index);
     return `
-      <button class="scene-hotspot ${completed ? 'completed' : ''} ${required ? 'day-one-node' : ''}" data-scene-id="${escapeHtml(scene.id)}" style="left:${pos[0]}%; top:${pos[1] + rowOffset}%;">
+      <button class="scene-hotspot ${completed ? 'completed' : ''} ${required ? 'day-one-node' : ''}" data-scene-id="${escapeHtml(scene.id)}" style="left:${pos.left}%; top:${pos.top}px;">
         <span class="scene-hotspot-icon">${escapeHtml(scene.emoji || '⭐')}</span>
         <span class="scene-hotspot-card">
           <strong>${escapeHtml(scene.title)}</strong>
@@ -3031,7 +3050,18 @@ function checkMulti() {
     if (!world) return renderMapHomeV29();
     const meta = WORLD_COPY_V29[world.id] || { title: world.title, ru: `Мы в мире ${world.title}`, text: world.description, icon: world.emoji, cls: `world-${world.id}` };
     const visibleScenes = getVisibleScenesForWorld(world.id);
-    const boardHeight = Math.max(540, 430 + Math.ceil(visibleScenes.length / 6) * 140);
+    const displayScenes = [...visibleScenes];
+    if (world.id === 'school') {
+      const getIndex = displayScenes.findIndex((scene)=>scene.id === 'school-get-to-school');
+      const findIndex = displayScenes.findIndex((scene)=>scene.id === 'school-schedule');
+      if (getIndex >= 0 && findIndex >= 0) {
+        const temp = displayScenes[getIndex];
+        displayScenes[getIndex] = displayScenes[findIndex];
+        displayScenes[findIndex] = temp;
+      }
+    }
+    const rowCount = Math.max(1, Math.ceil(displayScenes.length / 3));
+    const boardHeight = Math.max(620, 170 + rowCount * 190);
     return `
       <section class="world-adventure-panel ${escapeHtml(meta.cls)}-panel">
         <div class="world-adventure-head">
@@ -3048,7 +3078,7 @@ function checkMulti() {
           <div class="dotted-path path-one"></div>
           <div class="dotted-path path-two"></div>
           <div class="dotted-path path-three"></div>
-          ${visibleScenes.length ? visibleScenes.map(renderSceneNodeV29).join('') : `<article class="empty-card map-empty-card">Скоро здесь появятся задания.</article>`}
+          ${displayScenes.length ? displayScenes.map(renderSceneNodeV29).join('') : `<article class="empty-card map-empty-card">Скоро здесь появятся задания.</article>`}
         </div>
         <p class="scene-map-note">Сцены — не списком, а как точки действия на поле мира.</p>
       </section>
