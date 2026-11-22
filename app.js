@@ -2832,9 +2832,13 @@ function checkMulti() {
     const task = getCurrentTask();
     if (!task || task.type !== 'match_word_image') return;
     if (wordId === pictureId) {
+      const pair = (task.pairs || []).find((item) => item.id === wordId);
+      const spoken = pair?.speak || pair?.pictureSpeak || pair?.word;
       if (!state.matchedPairIds.includes(wordId)) state.matchedPairIds.push(wordId);
       state.selectedMatchWordId = null;
       state.selectedMatchPictureId = null;
+      // Match audio is feedback for a CORRECT completed pair only. Do not speak on the first tap.
+      if (spoken) speakEnglish(spoken);
       if (state.matchedPairIds.length >= task.pairs.length) { answerTask(true, '+10 XP! Все пары собраны.'); return; }
       state.feedback = 'Правильно! Найди следующую пару.';
       render();
@@ -3057,16 +3061,8 @@ function checkMulti() {
     if (!world) return renderMapHomeV29();
     const meta = WORLD_COPY_V29[world.id] || { title: world.title, ru: `Мы в мире ${world.title}`, text: world.description, icon: world.emoji, cls: `world-${world.id}` };
     const visibleScenes = getVisibleScenesForWorld(world.id);
+    // Keep School in learning order on the map: Get to school -> Find English class -> Collect school things.
     const displayScenes = [...visibleScenes];
-    if (world.id === 'school') {
-      const getIndex = displayScenes.findIndex((scene)=>scene.id === 'school-get-to-school');
-      const findIndex = displayScenes.findIndex((scene)=>scene.id === 'school-schedule');
-      if (getIndex >= 0 && findIndex >= 0) {
-        const temp = displayScenes[getIndex];
-        displayScenes[getIndex] = displayScenes[findIndex];
-        displayScenes[findIndex] = temp;
-      }
-    }
     const rowCount = Math.max(1, Math.ceil(displayScenes.length / 3));
     const boardHeight = Math.max(620, 170 + rowCount * 190);
     return `
@@ -3087,7 +3083,6 @@ function checkMulti() {
           <div class="dotted-path path-three"></div>
           ${displayScenes.length ? displayScenes.map(renderSceneNodeV29).join('') : `<article class="empty-card map-empty-card">Скоро здесь появятся задания.</article>`}
         </div>
-        <p class="scene-map-note">Сцены — не списком, а как точки действия на поле мира.</p>
       </section>
     `;
   }
@@ -3429,20 +3424,8 @@ function checkMulti() {
     playStoredAudio("lex", lexButton.dataset.lexSpeak);
   }, true);
 
-  // Match tasks: selecting a word now automatically plays the word/phrase.
-  document.addEventListener("pointerdown", (event) => {
-    if (event.target.closest?.("[data-speak]")) return;
-    const wordButton = event.target.closest?.("[data-match-word]");
-    if (!wordButton) return;
-    const task = getCurrentTask();
-    if (!task || task.type !== "match_word_image") return;
-    const pair = (task.pairs || []).find((item) => item.id === wordButton.dataset.matchWord);
-    const spoken = pair?.speak || pair?.word;
-    if (spoken) {
-      audioUnlocked = true;
-      playStoredAudio("learning", spoken, { quietMissing: true });
-    }
-  }, true);
+  // Match audio is played only after a correct pair is confirmed.
+
 
   window.EnglishKidsAudio = {
     learningCount: Object.keys(learningAudioIndex.exact).length,
@@ -3770,18 +3753,6 @@ function checkMulti() {
       return;
     }
 
-    // Match now speaks whichever side the child touches. Starting with the picture also
-    // reinforces the matching word without requiring the small Listen icon.
-    const matchWord = event.target.closest?.('[data-match-word]');
-    if (matchWord) {
-      const pair = (task.pairs || []).find((item)=>item.id===matchWord.dataset.matchWord);
-      autoPlayLearningV36(pair?.speak || pair?.word);
-      return;
-    }
-    const matchPicture = event.target.closest?.('[data-match-picture]');
-    if (matchPicture) {
-      const pair = (task.pairs || []).find((item)=>item.id===matchPicture.dataset.matchPicture);
-      autoPlayLearningV36(pair?.pictureSpeak || pair?.speak || pair?.word);
-    }
+    // Match is intentionally silent until the child completes a correct pair.
   }, true);
 })();
