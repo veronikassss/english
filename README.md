@@ -27,3 +27,12 @@
 - Get to school / Find English class positions swapped on the School map as requested.
 - Added 43 missing plural audio records.
 - Replaced 53 mixed Russian/English Lex recordings with corrected versions.
+
+
+## v35 fixes
+- persistent queued Lex autoplay with recovery after browser play rejection
+- all 53 corrected mixed Russian/English Lex recordings merged
+- match words play automatically when selected
+- Zoo sleep gate: 5 minutes OR 3 tasks in other worlds
+- sleeping Zoo scenes are visible gray but cannot be opened
+- Zoo day-one completion notification waits for the Zoo Guide License

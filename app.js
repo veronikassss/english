@@ -547,7 +547,7 @@ function isZooRestReady() {
 function maybeShowZooWakeToast() {
   if (!state.progress.zooRestStarted || state.progress.zooWakeToastShown || !isZooRestReady()) return;
   state.progress.zooWakeToastShown = true;
-  state.toastMessage = "🦁 Животные проснулись, наступил второй день подготовки к открытию зоопарка. Приходи помогать смотрителю.";
+  state.toastMessage = "🦁 Животные выспались и наконец проснулись. Приходи помогать смотрителю.";
   saveProgress();
 }
 
@@ -624,7 +624,7 @@ function completeScene(scene) {
     state.progress.zooRestStartNonZooTaskCount = countCompletedNonZooTasks();
     state.progress.zooRestUntil = Date.now() + 5 * 60 * 1000;
     state.progress.zooWakeToastShown = false;
-    state.toastMessage = "🦁 Животные набегались, наелись и устали. Они легли спать! Дождись второго дня в зоопарке, можешь пока исследовать другой мир.";
+    state.toastMessage = "🦁 Животные набегались, наелись и устали. Они легли спать! Дождись пока они проснутся, можешь пока исследовать другой мир.";
     saveProgress();
   } else if (scene.toastAfter) {
     state.toastMessage = scene.toastAfter;
@@ -2681,10 +2681,10 @@ function checkMulti() {
 
   const dayOneRequiredByWorldV28 = {
     school: ['school-pack-bag','school-get-to-school','school-schedule','school-collision','school-meet-classmates','school-team','school-final-review'],
-    cafe: ['cafe-find-snack','cafe-make-fruit-pizza','cafe-meet-visitors','cafe-look-visitors','cafe-serve-tables'],
-    park: ['park-walk','park-many-things','park-meet-ben','park-help-ben','park-team'],
+    cafe: ['cafe-find-snack','cafe-make-fruit-pizza','cafe-meet-visitors','cafe-look-visitors','cafe-serve-tables','cafe-close-day'],
+    park: ['park-walk','park-many-things','park-meet-ben','park-help-ben','park-team','park-final'],
     playground: ['playground-look-toys','playground-count-toys','playground-colors','playground-describe-kids','playground-about-me','playground-draw-groups','playground-go-home'],
-    zoo: ['zoo-open-enclosures','zoo-animal-pairs','zoo-meet-keeper','zoo-look-keeper','zoo-look-animal-groups'],
+    zoo: ['zoo-open-enclosures','zoo-animal-pairs','zoo-meet-keeper','zoo-look-keeper','zoo-look-animal-groups','zoo-guide-final'],
   };
   const worldRuV28 = {school:'School', cafe:'Café', park:'Park', playground:'Playground', zoo:'Zoo'};
   const firstSceneByWorldV28 = {
@@ -2725,10 +2725,12 @@ function checkMulti() {
     const skill = getSkill(skillId);
     return Boolean(skill && state.progress.xp >= skill.xpThreshold);
   };
-  isZooRestReady = function isZooRestReadyV28(){
+  isZooRestReady = function isZooRestReadyV35(){
     if (!state.progress.zooRestStarted) return true;
+    const enoughTimePassed = Date.now() >= Number(state.progress.zooRestUntil || 0);
     const startCount = Number(state.progress.zooRestStartNonZooTaskCount || 0);
-    return countCompletedNonZooTasks() >= startCount + 3;
+    const enoughOtherTasks = countCompletedNonZooTasks() >= startCount + 3;
+    return enoughTimePassed || enoughOtherTasks;
   };
   maybeShowZooWakeToast = function maybeShowZooWakeToastV28(){
     if (!state.progress.zooRestStarted || state.progress.zooWakeToastShown || !isZooRestReady()) return;
@@ -2737,7 +2739,7 @@ function checkMulti() {
     saveProgress();
   };
   function canRevealSpecialV28(sceneId){
-    if (sceneId === 'zoo-animal-pairs') return (completedSceneV28('zoo-feed-animals') && isZooRestReady()) || masteredSkillV28('plural');
+    if (sceneId === 'zoo-animal-pairs') return completedSceneV28('zoo-feed-animals') || masteredSkillV28('plural');
     if (sceneId === 'zoo-hungry-animals') return completedSceneV28('zoo-animal-pairs');
     if (sceneId === 'zoo-talk-keeper') return completedSceneV28('zoo-look-keeper');
     if (sceneId === 'zoo-guide-stage-1') return completedSceneV28('zoo-look-keeper') && (state.progress.lexSeenEventIds.includes('zoo-guide-registered') || completedSceneV28('zoo-talk-keeper'));
@@ -2928,7 +2930,7 @@ function checkMulti() {
     cafe: ['cafe-find-snack','cafe-make-fruit-pizza','cafe-meet-visitors','cafe-look-visitors','cafe-serve-tables'],
     park: ['park-walk','park-many-things','park-meet-ben','park-help-ben','park-team'],
     playground: ['playground-look-toys','playground-count-toys','playground-colors','playground-describe-kids','playground-about-me','playground-draw-groups','playground-go-home'],
-    zoo: ['zoo-open-enclosures','zoo-animal-pairs','zoo-meet-keeper','zoo-look-keeper','zoo-look-animal-groups'],
+    zoo: ['zoo-open-enclosures','zoo-animal-pairs','zoo-meet-keeper','zoo-look-keeper','zoo-look-animal-groups','zoo-guide-final'],
   };
 
   const SCENE_POSITIONS_V29 = [
@@ -3030,8 +3032,12 @@ function checkMulti() {
     const completed = state.progress.completedSceneIds.includes(scene.id);
     const required = (REQUIRED_DAY_ONE_V29[scene.worldId] || []).includes(scene.id);
     const pos = sceneNodePositionV34(index);
+    const zooOrder = ['zoo-open-enclosures','zoo-escaped-animals','zoo-feed-animals','zoo-animal-pairs','zoo-hungry-animals','zoo-meet-keeper','zoo-look-keeper','zoo-talk-keeper','zoo-guide-stage-1','zoo-look-animal-groups','zoo-guide-stage-2','zoo-guide-final'];
+    const afterFeed = scene.worldId === 'zoo' && zooOrder.indexOf(scene.id) > zooOrder.indexOf('zoo-feed-animals');
+    const sleeping = afterFeed && state.progress.zooRestStarted && !isZooRestReady();
+    const sceneAttr = sleeping ? `data-zoo-sleeping-scene="${escapeHtml(scene.id)}" disabled` : `data-scene-id="${escapeHtml(scene.id)}"`;
     return `
-      <button class="scene-hotspot ${completed ? 'completed' : ''} ${required ? 'day-one-node' : ''}" data-scene-id="${escapeHtml(scene.id)}" style="left:${pos.left}%; top:${pos.top}px;">
+      <button class="scene-hotspot ${completed ? 'completed' : ''} ${required ? 'day-one-node' : ''} ${sleeping ? 'temporarily-locked' : ''}" ${sceneAttr} style="left:${pos.left}%; top:${pos.top}px;">
         <span class="scene-hotspot-icon">${escapeHtml(scene.emoji || '⭐')}</span>
         <span class="scene-hotspot-card">
           <strong>${escapeHtml(scene.title)}</strong>
@@ -3040,6 +3046,7 @@ function checkMulti() {
           <span class="node-tags">
             ${required ? '<b>день 1</b>' : ''}
             ${completed ? '<b class="done">готово</b>' : ''}
+            ${sleeping ? '<b class="sleeping">животные спят</b>' : ''}
           </span>
         </span>
       </button>
@@ -3157,10 +3164,18 @@ function checkMulti() {
 })();
 
 
-// v32: fully stored audio. No browser speechSynthesis is used for game audio.
-(function applyStoredAudioV32(){
-  let currentStoredAudio = null;
+// v35: robust stored audio with persistent players, Lex queue and autoplay recovery.
+(function applyStoredAudioV35(){
+  const manualPlayer = new Audio();
+  const lexAutoPlayer = new Audio();
+  manualPlayer.preload = "auto";
+  lexAutoPlayer.preload = "auto";
+
   let audioUnlocked = false;
+  let manualBusy = false;
+  let lexAutoBusy = false;
+  let lexNeedsGesture = false;
+  const lexQueue = [];
 
   function normalizeAudioKey(value) {
     return String(value || "")
@@ -3191,13 +3206,66 @@ function checkMulti() {
     return index.exact[raw] || index.normalized.get(normalizeAudioKey(raw)) || "";
   }
 
-  function stopStoredAudio() {
-    if (!currentStoredAudio) return;
+  function stopManualAudio() {
+    try { manualPlayer.pause(); manualPlayer.currentTime = 0; } catch {}
+    manualBusy = false;
+  }
+
+  function finishLexAuto({drop = true} = {}) {
+    if (drop && lexQueue.length) lexQueue.shift();
+    lexAutoBusy = false;
+    lexNeedsGesture = false;
+    try { lexAutoPlayer.pause(); lexAutoPlayer.currentTime = 0; } catch {}
+  }
+
+  function startNextLexAuto() {
+    if (!audioUnlocked || lexAutoBusy || manualBusy || !lexQueue.length) return false;
+    const item = lexQueue[0];
+    const src = resolveStoredAudio("lex", item.text);
+    if (!src) {
+      lexQueue.shift();
+      queueMicrotask(startNextLexAuto);
+      return false;
+    }
+
+    lexAutoBusy = true;
+    lexAutoPlayer.src = src;
+    lexAutoPlayer.currentTime = 0;
+    lexAutoPlayer.volume = 1;
+
+    const onDone = () => {
+      if (!lexAutoBusy) return;
+      finishLexAuto({drop:true});
+      setTimeout(startNextLexAuto, 90);
+    };
+    lexAutoPlayer.onended = onDone;
+    lexAutoPlayer.onerror = onDone;
+
     try {
-      currentStoredAudio.pause();
-      currentStoredAudio.currentTime = 0;
-    } catch {}
-    currentStoredAudio = null;
+      const p = lexAutoPlayer.play();
+      if (p?.catch) {
+        p.catch(() => {
+          // Keep the queue item. The next real user gesture retries it.
+          lexAutoBusy = false;
+          lexNeedsGesture = true;
+        });
+      }
+      return true;
+    } catch {
+      lexAutoBusy = false;
+      lexNeedsGesture = true;
+      return false;
+    }
+  }
+
+  function enqueueLexAuto(text) {
+    const clean = cleanLexText(text);
+    if (!clean || !resolveStoredAudio("lex", clean)) return false;
+    // Avoid the same text being queued twice by one UI event.
+    const last = lexQueue[lexQueue.length - 1];
+    if (!last || last.text !== clean) lexQueue.push({text: clean, at: Date.now()});
+    startNextLexAuto();
+    return true;
   }
 
   function playStoredAudio(group, text, { quietMissing = false } = {}) {
@@ -3212,61 +3280,76 @@ function checkMulti() {
       return false;
     }
 
-    stopStoredAudio();
-    const audio = new Audio(src);
-    currentStoredAudio = audio;
-    audio.preload = "auto";
-    audio.volume = 1;
-    audio.onended = () => {
-      if (currentStoredAudio === audio) currentStoredAudio = null;
+    // A deliberate Listen/replay click has priority over automatic Lex speech.
+    if (lexAutoBusy) finishLexAuto({drop:true});
+    stopManualAudio();
+    manualBusy = true;
+    manualPlayer.src = src;
+    manualPlayer.currentTime = 0;
+    manualPlayer.volume = 1;
+
+    const done = () => {
+      manualBusy = false;
+      setTimeout(startNextLexAuto, 80);
     };
-    audio.onerror = () => {
-      if (currentStoredAudio === audio) currentStoredAudio = null;
+    manualPlayer.onended = done;
+    manualPlayer.onerror = () => {
+      manualBusy = false;
       if (!quietMissing) {
         state.feedback = "Не получилось воспроизвести запись. Нажми 🔊 ещё раз.";
         render();
       }
+      setTimeout(startNextLexAuto, 80);
     };
-    const promise = audio.play();
-    if (promise?.catch) {
-      promise.catch(() => {
-        if (currentStoredAudio === audio) currentStoredAudio = null;
-        if (!quietMissing) {
-          state.feedback = "Браузер не запустил звук. Нажми 🔊 ещё раз.";
-          render();
-        }
-      });
+
+    try {
+      const p = manualPlayer.play();
+      if (p?.catch) {
+        p.catch(() => {
+          manualBusy = false;
+          if (!quietMissing) {
+            state.feedback = "Браузер не запустил звук. Нажми 🔊 ещё раз.";
+            render();
+          }
+        });
+      }
+    } catch {
+      manualBusy = false;
+      return false;
     }
     return true;
   }
 
-  // A user interaction unlocks ordinary browser audio playback.
-  document.addEventListener("pointerdown", () => { audioUnlocked = true; }, { capture: true, once: true });
-  document.addEventListener("keydown", () => { audioUnlocked = true; }, { capture: true, once: true });
+  // Every real gesture re-unlocks audio and retries any Lex phrase that a browser rejected.
+  const unlockAndRetry = () => {
+    audioUnlocked = true;
+    if (lexNeedsGesture || lexQueue.length) startNextLexAuto();
+  };
+  document.addEventListener("pointerdown", unlockAndRetry, { capture: true });
+  document.addEventListener("keydown", unlockAndRetry, { capture: true });
+  // Bubble-phase click runs after scene/choice handlers, so newly queued Lex text can play
+  // inside the same user gesture instead of waiting for another click.
+  document.addEventListener("click", unlockAndRetry, false);
 
-  // Replace all educational TTS with pre-generated Jenny MP3s.
-  speakEnglish = function speakEnglishStoredV32(text) {
+  speakEnglish = function speakEnglishStoredV35(text) {
     const cleaned = String(text || "").trim();
     if (!cleaned) return;
+    audioUnlocked = true;
     playStoredAudio("learning", cleaned);
   };
 
-  // Lex gets his own stored Eugene voice. New Lex messages speak automatically after user interaction.
-  const originalAddLexMessageV32 = addLexMessage;
-  addLexMessage = function addLexMessageStoredV32(text, options = {}) {
+  const originalAddLexMessageV35 = addLexMessage;
+  addLexMessage = function addLexMessageStoredV35(text, options = {}) {
     ensureLexArrays();
     const before = state.progress.lexMessages.length;
     const cleanText = cleanLexText(text);
-    originalAddLexMessageV32(text, options);
+    originalAddLexMessageV35(text, options);
     const after = state.progress.lexMessages.length;
     const isLex = (options.speaker || "lex") !== "user";
-    if (isLex && cleanText && after > before && audioUnlocked) {
-      playStoredAudio("lex", cleanText, { quietMissing: true });
-    }
+    if (isLex && cleanText && after > before) enqueueLexAuto(cleanText);
   };
 
-  // Render a replay speaker on every stored Lex message.
-  renderLexDialog = function renderLexDialogStoredV32() {
+  renderLexDialog = function renderLexDialogStoredV35() {
     ensureLexArrays();
     const messages = state.progress.lexMessages || [];
     const visibleMessages = messages.slice(-8);
@@ -3307,17 +3390,14 @@ function checkMulti() {
     `;
   };
 
-  // Sound check now tests an actual stored game file rather than speechSynthesis.
-  renderAudioCheckModal = function renderAudioCheckModalStoredV32() {
+  renderAudioCheckModal = function renderAudioCheckModalStoredV35() {
     return `
       <div class="modal-backdrop">
         <section class="modal-card audio-check-card">
           <p class="small-label">Sound check</p>
           <h2>Проверка звука</h2>
-          <p class="rule-text">Нажми «Listen» и выбери, что услышала. Это сохранённая запись из игры, поэтому она должна звучать одинаково каждый раз.</p>
-          <div class="audio-check-word">
-            <button class="listen-button" data-speak="a lion">🔊 Listen: a lion</button>
-          </div>
+          <p class="rule-text">Нажми «Listen» и выбери, что услышала. Это сохранённая запись из игры.</p>
+          <div class="audio-check-word"><button class="listen-button" data-speak="a lion">🔊 Listen: a lion</button></div>
           <div class="choice-grid audio-check-grid">
             <button class="choice-card" data-action="audio-check-correct"><span class="choice-image">🦁</span><strong>lion</strong><small>лев</small></button>
             <button class="choice-card" data-action="audio-check-wrong"><span class="choice-image">🐶</span><strong>dog</strong><small>собака</small></button>
@@ -3332,14 +3412,14 @@ function checkMulti() {
     `;
   };
 
-  resetAudioEngine = function resetAudioEngineStoredV32() {
-    stopStoredAudio();
+  resetAudioEngine = function resetAudioEngineStoredV35() {
+    audioUnlocked = true;
+    stopManualAudio();
     state.lastAudioCheckResult = "Проигрываю a lion ещё раз.";
     render();
     setTimeout(() => playStoredAudio("learning", "a lion"), 0);
   };
 
-  // Replay individual Lex messages. This listener survives all rerenders.
   document.addEventListener("click", (event) => {
     const lexButton = event.target.closest?.("[data-lex-speak]");
     if (!lexButton) return;
@@ -3349,13 +3429,29 @@ function checkMulti() {
     playStoredAudio("lex", lexButton.dataset.lexSpeak);
   }, true);
 
-  // Expose tiny diagnostics for development without showing XP/internal state.
+  // Match tasks: selecting a word now automatically plays the word/phrase.
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest?.("[data-speak]")) return;
+    const wordButton = event.target.closest?.("[data-match-word]");
+    if (!wordButton) return;
+    const task = getCurrentTask();
+    if (!task || task.type !== "match_word_image") return;
+    const pair = (task.pairs || []).find((item) => item.id === wordButton.dataset.matchWord);
+    const spoken = pair?.speak || pair?.word;
+    if (spoken) {
+      audioUnlocked = true;
+      playStoredAudio("learning", spoken, { quietMissing: true });
+    }
+  }, true);
+
   window.EnglishKidsAudio = {
     learningCount: Object.keys(learningAudioIndex.exact).length,
     lexCount: Object.keys(lexAudioIndex.exact).length,
     hasLearning: (text) => Boolean(resolveStoredAudio("learning", text)),
     hasLex: (text) => Boolean(resolveStoredAudio("lex", text)),
-    stop: stopStoredAudio,
+    retryLex: () => { audioUnlocked = true; startNextLexAuto(); },
+    get lexQueueLength() { return lexQueue.length; },
+    stop: () => { stopManualAudio(); finishLexAuto({drop:false}); },
   };
 })();
 
@@ -3493,4 +3589,199 @@ function checkMulti() {
     normalVolume: NORMAL_VOLUME,
     duckVolume: DUCK_VOLUME,
   };
+})();
+
+
+// v35: Zoo sleep gate is a real functional lock, not only a visual state.
+(function applyZooSleepGateV35(){
+  const zooOrderV35 = ['zoo-open-enclosures','zoo-escaped-animals','zoo-feed-animals','zoo-animal-pairs','zoo-hungry-animals','zoo-meet-keeper','zoo-look-keeper','zoo-talk-keeper','zoo-guide-stage-1','zoo-look-animal-groups','zoo-guide-stage-2','zoo-guide-final'];
+  const feedIndexV35 = zooOrderV35.indexOf('zoo-feed-animals');
+
+  function isZooSceneSleepingV35(sceneId){
+    const idx = zooOrderV35.indexOf(sceneId);
+    return idx > feedIndexV35 && state.progress.zooRestStarted && !isZooRestReady();
+  }
+
+  const previousOpenSceneV35 = openScene;
+  openScene = function openSceneZooSleepGuardV35(sceneId){
+    if (isZooSceneSleepingV35(sceneId)) {
+      state.toastMessage = 'Животные ещё спят. Подожди 5 минут или выполни 3 задания в других мирах.';
+      render();
+      return;
+    }
+    previousOpenSceneV35(sceneId);
+  };
+
+  // If the five-minute timer finishes while the page is open, wake the Zoo without a reload.
+  let wasReady = isZooRestReady();
+  setInterval(() => {
+    if (!state.progress.zooRestStarted) return;
+    const ready = isZooRestReady();
+    if (ready && !wasReady) {
+      maybeShowZooWakeToast();
+      render();
+    }
+    wasReady = ready;
+  }, 5000);
+})();
+
+
+// v36: all-choice auto-audio + final Café/Park/Playground flow corrections.
+(function applyV36WorldAndAutoAudio(){
+  function completedV36(id){ return state.progress.completedSceneIds.includes(id); }
+  function sceneV36(id){ return scenes.find((item)=>item.id===id); }
+
+  // Talk to waiter becomes visible right after Look at café visitors and is positioned
+  // right after that scene on the map. It no longer waits for Notice groups.
+  const previousGetVisibleV36 = getVisibleScenesForWorld;
+  getVisibleScenesForWorld = function getVisibleScenesForWorldV36(worldId){
+    let list = previousGetVisibleV36(worldId) || [];
+    if (worldId === 'cafe') {
+      list = list.filter((item)=>item.id !== 'cafe-talk-waiter');
+      if (completedV36('cafe-look-visitors')) {
+        const talk = sceneV36('cafe-talk-waiter');
+        if (talk) {
+          const afterId = 'cafe-look-visitors';
+          const idx = list.findIndex((item)=>item.id===afterId);
+          if (idx >= 0) list.splice(idx+1, 0, talk); else list.push(talk);
+        }
+      }
+    }
+    if (worldId === 'playground') {
+      const add = (id) => {
+        if (!list.some((item)=>item.id===id)) {
+          const s = sceneV36(id);
+          if (s) list.push(s);
+        }
+      };
+      // Easy is the required coloring scene. After it, the child can either finish the
+      // day via Time to go home or optionally continue with Medium.
+      if (completedV36('playground-color-easy')) {
+        add('playground-color-medium');
+        add('playground-go-home');
+      }
+      if (completedV36('playground-color-medium')) add('playground-color-hard');
+      // Keep Time to go home visually last even when Hard is also visible.
+      list = list.filter((item)=>item.id!=='playground-go-home').concat(
+        list.filter((item)=>item.id==='playground-go-home')
+      );
+    }
+    return list;
+  };
+
+  // Park nature words are introduced by the article card before the scene. Mark the
+  // corresponding Garden set as learned at that moment so it is available even if the
+  // child chooses "Начать задание" instead of visiting the Garden immediately.
+  const previousCloseGrammarCardV36 = closeGrammarCard;
+  closeGrammarCard = function closeGrammarCardV36(){
+    const cardId = state.modalGrammarCardId || state.modalSkillId;
+    const pending = state.pendingScene;
+    if (cardId === 'card-park-articles' && pending?.id === 'park-walk') {
+      if (!state.progress.seenVocabCardIds.includes('vocab-park-nature-card')) {
+        state.progress.seenVocabCardIds.push('vocab-park-nature-card');
+        saveProgress();
+      }
+    }
+    previousCloseGrammarCardV36();
+  };
+
+  // The new Café group-adjective vocab card must send the child to Vocabulary Garden
+  // once for practice, then the next click on Notice groups starts the scene.
+  const previousCloseVocabCardV36 = closeVocabCard;
+  closeVocabCard = function closeVocabCardV36(){
+    const cardId = state.modalVocabCardId;
+    const pending = state.pendingScene;
+    if (cardId === 'vocab-cafe-groups-review-card' && pending?.id === 'cafe-notice-groups') {
+      ['vocab-cafe-groups-review-card','vocab-garden-card'].forEach((id)=>{
+        if (!state.progress.seenVocabCardIds.includes(id)) state.progress.seenVocabCardIds.push(id);
+      });
+      state.modalVocabCardId = null;
+      state.pendingScene = null;
+      state.pendingWorldId = null;
+      state.selectedWorldId = 'vocabulary';
+      state.selectedScene = null;
+      state.sceneCompletedView = null;
+      saveProgress();
+      render();
+      return;
+    }
+    previousCloseVocabCardV36();
+  };
+
+  // When Park's article grammar flow offers Vocabulary Garden, make the nature set
+  // available before navigating there. This lets us remove the duplicate after-scene card.
+  const previousHandleLexChoiceV36 = handleLexChoice;
+  handleLexChoice = function handleLexChoiceV36(choiceId){
+    const pending = state.lexPending;
+    if (choiceId === 'to-vocab' && pending?.type === 'vocab-or-scene' && pending.sceneId === 'park-walk') {
+      if (!state.progress.seenVocabCardIds.includes('vocab-park-nature-card')) {
+        state.progress.seenVocabCardIds.push('vocab-park-nature-card');
+        saveProgress();
+      }
+    }
+    previousHandleLexChoiceV36(choiceId);
+  };
+
+  // Decide what a visible choice should say. Short grammar tokens are spoken exactly as
+  // displayed; numeric labels may use an explicit speak value so 4 becomes "four".
+  function choiceSpeechV36(choice){
+    if (!choice) return '';
+    let label = String(choice.label || '').trim();
+    if (label.includes('/')) label = label.split('/')[0].trim();
+    if (/^(a|an|am|is|are|yes|no|true|false)$/i.test(label)) return label;
+    const explicit = String(choice.speak || '').trim();
+    if (explicit && /\d/.test(label)) return explicit;
+    return explicit || label;
+  }
+
+  function autoPlayLearningV36(text){
+    const clean = String(text || '').trim();
+    if (!clean || !/[A-Za-z]/.test(clean)) return;
+    // Missing files are intentionally silent until the generated audio patch is merged.
+    if (window.EnglishKidsAudio?.hasLearning && !window.EnglishKidsAudio.hasLearning(clean)) return;
+    speakEnglish(clean);
+  }
+
+  // Use pointerdown so the audio starts in the original user gesture before a correct
+  // answer advances and rerenders the task.
+  document.addEventListener('pointerdown', (event)=>{
+    if (event.target.closest?.('[data-speak]')) return;
+    const task = getCurrentTask();
+    if (!task) return;
+
+    const choiceButton = event.target.closest?.('[data-choice-id]');
+    if (choiceButton) {
+      const choice = (task.choices || []).find((item)=>item.id===choiceButton.dataset.choiceId);
+      autoPlayLearningV36(choiceSpeechV36(choice));
+      return;
+    }
+
+    const multiButton = event.target.closest?.('[data-multi-id]');
+    if (multiButton) {
+      const choice = (task.choices || []).find((item)=>item.id===multiButton.dataset.multiId);
+      autoPlayLearningV36(choiceSpeechV36(choice));
+      return;
+    }
+
+    const objectButton = event.target.closest?.('[data-object-id]');
+    if (objectButton) {
+      const object = (task.objects || []).find((item)=>item.id===objectButton.dataset.objectId);
+      autoPlayLearningV36(object?.speak || object?.label);
+      return;
+    }
+
+    // Match now speaks whichever side the child touches. Starting with the picture also
+    // reinforces the matching word without requiring the small Listen icon.
+    const matchWord = event.target.closest?.('[data-match-word]');
+    if (matchWord) {
+      const pair = (task.pairs || []).find((item)=>item.id===matchWord.dataset.matchWord);
+      autoPlayLearningV36(pair?.speak || pair?.word);
+      return;
+    }
+    const matchPicture = event.target.closest?.('[data-match-picture]');
+    if (matchPicture) {
+      const pair = (task.pairs || []).find((item)=>item.id===matchPicture.dataset.matchPicture);
+      autoPlayLearningV36(pair?.pictureSpeak || pair?.speak || pair?.word);
+    }
+  }, true);
 })();

@@ -1917,7 +1917,7 @@ const scenes = [
     "completionTitle": "Animals are resting!",
     "completionText": "Животные набегались, наелись и легли спать.",
     "requiredAnyCompletedSceneIds": [],
-    "toastAfter": "Животные набегались, наелись и устали. Они легли спать! Дождись второго дня в зоопарке, можешь пока исследовать другой мир",
+    "toastAfter": "Животные набегались, наелись и устали. Они легли спать! Дождись пока они проснутся, можешь пока исследовать другой мир.",
     "lexAfter": "Да, первый день в зоопарке прошёл не так гладко! Надеюсь завтра мы лучше справимся... ну я... ты-то отлично справился. Пойдём может в другой мир пока?"
   },
   {
@@ -1971,7 +1971,7 @@ const scenes = [
     "completionImage": "/images/zoo/zoo-hungry-new.png",
     "completionTitle": "Hungry animals found!",
     "completionText": "Смотритель теперь знает, кого кормить.",
-    "lexAfter": "Какие же они проглоты! Вечно хотят кушать. Мы уже второй день работаем в зоопарке, а так и не представились смотрителю."
+    "lexAfter": "Какие же они проглоты! Вечно хотят кушать. Мы уже так долго работаем в зоопарке, а так и не представились смотрителю."
   },
   {
     "id": "zoo-meet-keeper",
@@ -1980,7 +1980,7 @@ const scenes = [
     "titleRu": "Представься смотрителю",
     "emoji": "👋",
     "description": "Introduce yourself to the zoo keeper.",
-    "descriptionRu": "Мы уже второй день работаем в зоопарке, а так и не представились смотрителю. Давай уже знакомиться!",
+    "descriptionRu": "Мы уже так долго работаем в зоопарке, а так и не представились смотрителю. Давай уже знакомиться!",
     "requiredXp": 0,
     "requiredGrammarSkillIds": [
       "to_be"
@@ -2195,10 +2195,10 @@ const scenes = [
     ],
     "completionImage": "/images/zoo/zoo-guide-license.png",
     "completionTitle": "Zoo Guide License",
-    "completionText": "Второй день закончен! Все получили лицензию, теперь нужно хорошенько отдохнуть.",
+    "completionText": "Первый день в Zoo закончен! Все получили лицензию, теперь можно хорошенько отдохнуть.",
     "achievementAfterId": "zoo-guide-license",
-    "lexAfter": "Вау! Ты это видела! Мы теперь реальные экскурсоводы и можем сами их проводить. Сколько мы сделали за второй день!",
-    "toastAfter": "Второй день закончен! Все получили лицензию, теперь нужно хорошенько отдохнуть"
+    "lexAfter": "Вау! Ты это видела! Мы теперь реальные экскурсоводы и можем сами их проводить. Сколько мы сделали за первый день!",
+    "toastAfter": "Первый день в Zoo закончен! Все получили лицензию, теперь можно хорошенько отдохнуть"
   },
   {
     "id": "vocab-garden-zoo-animals",
@@ -19841,3 +19841,74 @@ const tasks = [
     }
   }
 ];
+
+
+// v36: final world-flow/content corrections from the November 22 review.
+(function applyContentV36(){
+  const scene = (id) => scenes.find((item) => item.id === id);
+  const task = (id) => tasks.find((item) => item.id === id);
+  const vocab = (id) => vocabCards.find((item) => item.id === id);
+
+  // Café adjective vocabulary: short = низкий (not маленький).
+  const basicAdj = vocab('vocab-garden-card');
+  if (basicAdj) {
+    const shortItem = (basicAdj.items || []).find((item) => item.word === 'short');
+    if (shortItem) shortItem.ru = 'низкий';
+  }
+
+  // A fresh review card must appear specifically before Notice groups, even if the
+  // words were encountered earlier elsewhere in Café.
+  if (!vocab('vocab-cafe-groups-review-card')) {
+    vocabCards.push({
+      id: 'vocab-cafe-groups-review-card',
+      typeLabel: 'Vocabulary card',
+      title: 'Describe groups',
+      rule: 'Повтори слова перед тем, как описывать группы людей.',
+      items: [
+        { word:'beautiful', ru:'красивый', image:'🌸', sentence:'They are beautiful.' },
+        { word:'short', ru:'низкий', image:'🐭', sentence:'They are short.' },
+        { word:'tall', ru:'высокий', image:'🦒', sentence:'They are tall.' },
+        { word:'ugly', ru:'некрасивый / страшненький', image:'🧌', sentence:'They are ugly.' },
+      ]
+    });
+  }
+  const noticeGroups = scene('cafe-notice-groups');
+  if (noticeGroups) {
+    noticeGroups.vocabCardBeforeId = 'vocab-cafe-groups-review-card';
+    // This scene no longer points the child toward the waiter, because Talk to waiter
+    // is now available after Look at café visitors.
+    noticeGroups.lexAfter = 'Отлично! Теперь мы умеем описывать целые компании людей.';
+  }
+  // Keep the Russian meaning of short consistent everywhere in current day-one content.
+  tasks.forEach((t) => {
+    (t.items || []).forEach((item) => { if (item.word === 'short') item.ru = 'низкий'; });
+  });
+  const cafeShort = task('task-cafe-adj-5');
+  if (cafeShort) cafeShort.instruction = 'Выбери: оно низкое.';
+  const parkDogShort = task('task-park-dog-short');
+  if (parkDogShort) parkDogShort.instruction = 'Как сказать: она низкая.';
+
+  const groupShort = task('task-cafe-group-adj-4');
+  if (groupShort) groupShort.instruction = 'Выбери: вы низкие.';
+  const groupPhrase = task('task-cafe-group-adj-5');
+  if (groupPhrase) groupPhrase.instruction = 'Выбери правильную часть фразы: они красивые.';
+
+  // Talk to waiter belongs immediately after Look at café visitors, not after Notice groups.
+  const talkWaiter = scene('cafe-talk-waiter');
+  if (talkWaiter) talkWaiter.requiredCompletedSceneIds = ['cafe-look-visitors'];
+
+  // Park: the nature vocabulary is already introduced before practice via the Lex/grammar flow.
+  // Do not show the same vocabulary card again after Walk in the park.
+  const parkWalk = scene('park-walk');
+  if (parkWalk) parkWalk.vocabCardAfterId = null;
+
+  // Restore intended Lex sequence in Park.
+  const helpBen = scene('park-help-ben');
+  if (helpBen) helpBen.lexAfter = 'Такие классные помощники у Бена. Может и с ними подружимся?';
+  const describeHelpers = scene('park-describe-helpers');
+  if (describeHelpers) describeHelpers.lexAfter = 'Блин, такая погода хорошая, а как сказать какая погода-то... подожди, у меня было что-то об этом.';
+
+  // Park final a/an: do not duplicate the same a/an as a giant pseudo-image below the label.
+  const parkFinalArticles = task('task-park-final-1');
+  if (parkFinalArticles) (parkFinalArticles.choices || []).forEach((choice) => { choice.image = ''; });
+})();

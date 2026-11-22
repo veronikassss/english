@@ -1722,3 +1722,20 @@ body {
   filter: grayscale(.25);
 }
 \n\n/* v34: world maps grow to fit every unlocked scene; no missions are clipped below the board. */\n.world-scene-map {\n  overflow: hidden;\n  width: 100%;\n  min-width: 0;\n}\n.world-adventure-panel { overflow: visible; }\n@media (min-width: 861px) {\n  .world-scene-map { padding-bottom: 28px; }\n}\n
+/* v35: Zoo scenes shown while animals sleep are visible but unavailable. */
+.scene-hotspot.temporarily-locked {
+  cursor: not-allowed;
+  filter: grayscale(.72);
+  opacity: .55;
+}
+.scene-hotspot.temporarily-locked:hover {
+  transform: translate(-50%, -50%);
+  filter: grayscale(.72);
+}
+.scene-hotspot.temporarily-locked .scene-hotspot-icon,
+.scene-hotspot.temporarily-locked .scene-hotspot-card {
+  background: rgba(241,245,249,.94);
+  border-color: #cbd5e1;
+  box-shadow: none;
+}
+.node-tags b.sleeping { background:#e2e8f0; color:#475569; }
