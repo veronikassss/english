@@ -1,4 +1,4 @@
-const STORAGE_KEY = "english-kids-mvp-static-progress-v28-day1-final";
+const STORAGE_KEY = "english-kids-mvp-github-v31-fixed";
 
 const defaultProgress = {
   userId: "local-user",
@@ -364,7 +364,23 @@ function clearLexDialog() {
 
 function asset(path) {
   if (!path) return "";
-  return path.replace(/^\/images\//, "assets/images/").replace(/^\//, "");
+  const raw = String(path);
+  if (/^data:/i.test(raw)) return raw;
+  let key = raw;
+  if (key.startsWith("assets/images/")) key = "/images/" + key.slice("assets/images/".length);
+  if (!key.startsWith("/images/") && key.startsWith("images/")) key = "/" + key;
+  if (window.IMAGE_ASSETS && window.IMAGE_ASSETS[key]) return window.IMAGE_ASSETS[key];
+  return raw.replace(/^\/images\//, "assets/images/").replace(/^\//, "");
+}
+
+function applyEmbeddedUiAssets() {
+  const root = document.documentElement;
+  const worldMap = asset("/images/ui/world-map-polished.png");
+  const kid = asset("/images/ui/kid-avatar-polished.png");
+  const lex = asset("/images/ui/lex-avatar-polished.png");
+  if (worldMap) root.style.setProperty("--world-map-bg", `url("${worldMap}")`);
+  if (kid) root.style.setProperty("--kid-avatar-bg", `url("${kid}")`);
+  if (lex) root.style.setProperty("--lex-avatar-bg", `url("${lex}")`);
 }
 
 function getSkill(skillId) {
@@ -391,6 +407,8 @@ function canShowWorld(world) {
 }
 
 let speechTimer = null;
+let currentUtterance = null;
+
 function getEnglishVoice() {
   const voices = window.speechSynthesis?.getVoices?.() || [];
   return voices.find((voice) => /^en[-_]?us/i.test(voice.lang)) ||
@@ -402,70 +420,66 @@ function getEnglishVoice() {
 function normalizeSpeechPhrase(text) {
   const raw = String(text || "").trim();
   if (!raw) return "";
-  // Short browser TTS phrases can clip the last sound on local HTML files.
-  // A final punctuation mark gives the speech engine a tiny natural pause.
   return /[.!?]$/.test(raw) ? raw : `${raw}.`;
 }
 
-function speakEnglish(text, attempt = 0) {
+function speakEnglish(text) {
   const phrase = normalizeSpeechPhrase(text);
   if (!phrase) return;
 
   if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-    state.feedback = "В этом браузере нет озвучки. Лучше открыть в Chrome или Edge.";
+    state.feedback = "В этом браузере нет встроенной озвучки. Открой сайт в Chrome или Edge.";
     render();
     return;
   }
 
   try {
     const synth = window.speechSynthesis;
-    const voices = synth.getVoices?.() || [];
-
-    // Some browsers load voices only after the first user click. Retry once voices appear.
-    if (!voices.length && attempt < 5) {
-      setTimeout(() => speakEnglish(phrase, attempt + 1), 120);
-      return;
-    }
-
-    if (speechTimer) clearInterval(speechTimer);
+    if (speechTimer) { clearInterval(speechTimer); speechTimer = null; }
     synth.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(phrase);
-    utterance.lang = "en-US";
-    utterance.rate = 0.58;
-    utterance.pitch = 1.02;
-    utterance.volume = 1;
-
-    const voice = getEnglishVoice();
-    if (voice) utterance.voice = voice;
-
-    utterance.onstart = () => { state.feedback = `🔊 ${phrase}`; };
-    utterance.onerror = () => { state.feedback = "Озвучка не запустилась. Попробуй Chrome или Edge."; render(); };
-
     synth.resume?.();
-    setTimeout(() => {
-      synth.speak(utterance);
-      synth.resume?.();
-    }, 90);
 
-    // Chrome sometimes pauses speechSynthesis on local files; this keeps it alive.
+    currentUtterance = new SpeechSynthesisUtterance(phrase);
+    currentUtterance.lang = "en-US";
+    currentUtterance.rate = 0.72;
+    currentUtterance.pitch = 1.0;
+    currentUtterance.volume = 1;
+    const voice = getEnglishVoice();
+    if (voice) currentUtterance.voice = voice;
+
+    currentUtterance.onstart = () => { state.feedback = `🔊 ${phrase}`; };
+    currentUtterance.onend = () => { currentUtterance = null; };
+    currentUtterance.onerror = (event) => {
+      currentUtterance = null;
+      if (event?.error !== "canceled" && event?.error !== "interrupted") {
+        state.feedback = "Озвучка не запустилась. Нажми 🔊 ещё раз или открой сайт в Chrome/Edge.";
+        render();
+      }
+    };
+
+    // Start directly from the user's click. This is more reliable on GitHub Pages
+    // than delayed/retried speech calls.
+    synth.speak(currentUtterance);
+
     let ticks = 0;
     speechTimer = setInterval(() => {
       ticks += 1;
       synth.resume?.();
-      if (!synth.speaking || ticks > 20) {
+      if ((!synth.speaking && !synth.pending) || ticks > 80) {
         clearInterval(speechTimer);
         speechTimer = null;
       }
-    }, 200);
+    }, 250);
   } catch (error) {
-    state.feedback = "Озвучка не запустилась. Лучше открыть в Chrome или Edge.";
+    currentUtterance = null;
+    state.feedback = "Озвучка не запустилась. Открой сайт в Chrome или Edge и нажми 🔊 ещё раз.";
     render();
   }
 }
 
 if ("speechSynthesis" in window) {
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  window.speechSynthesis.getVoices?.();
+  window.speechSynthesis.addEventListener?.("voiceschanged", () => window.speechSynthesis.getVoices());
 }
 
 function hasCompletedAny(sceneIds) {
@@ -975,14 +989,17 @@ function renderAudioCheckModal() {
 function resetAudioEngine() {
   try {
     if (speechTimer) { clearInterval(speechTimer); speechTimer = null; }
+    currentUtterance = null;
     window.speechSynthesis?.cancel?.();
     window.speechSynthesis?.resume?.();
     window.speechSynthesis?.getVoices?.();
-    state.lastAudioCheckResult = "Голос перезапущен. Сейчас попробуй Listen ещё раз. Если звук пропал, обнови страницу и нажми 🔊 снова.";
+    state.lastAudioCheckResult = "Голос перезапущен. Снова проигрываю kitten.";
+    render();
+    speakEnglish("kitten");
   } catch {
-    state.lastAudioCheckResult = "Не получилось перезапустить голос. Лучше открыть в Chrome или Edge.";
+    state.lastAudioCheckResult = "Не получилось перезапустить голос. Открой сайт в Chrome или Edge.";
+    render();
   }
-  render();
 }
 
 function renderTopBar() {
@@ -1748,16 +1765,11 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-speak]").forEach((button) => {
-    const speakHandler = (event) => {
+    button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const now = Date.now();
-      if (button.dataset.lastSpeakAt && now - Number(button.dataset.lastSpeakAt) < 350) return;
-      button.dataset.lastSpeakAt = String(now);
       speakEnglish(button.dataset.speak);
-    };
-    button.addEventListener("pointerdown", speakHandler);
-    button.addEventListener("click", speakHandler);
+    });
   });
 
   const fillInput = document.getElementById("fillInput");
@@ -1903,7 +1915,7 @@ function checkMulti() {
   answerTask(isCorrect, isCorrect ? "+10 XP! Всё правильно." : undefined);
 }
 
-document.addEventListener("DOMContentLoaded", render);
+// v31: final map renderer handles DOMContentLoaded below.
 
 
 // v24 app patch: stable audio reset, world grammar links, vocab-card routing, coloring palette.
@@ -2972,7 +2984,7 @@ document.addEventListener("DOMContentLoaded", render);
   function renderMapHomeV29(){
     const allWorlds = ['school','cafe','playground','park','zoo','vocabulary']
       .map((id)=>worlds.find((world)=>world.id===id))
-      .filter(Boolean);
+      .filter((world)=>world && canShowWorld(world));
     return `
       <section class="map-home-panel">
         <div class="map-home-head">
@@ -2981,10 +2993,11 @@ document.addEventListener("DOMContentLoaded", render);
             <h2>Карта миров</h2>
             <p>Выбирай любой мир и проходи первый день приключения.</p>
           </div>
-          <span class="all-open-badge">✨ Все миры открыты</span>
+          <span class="all-open-badge">✨ Все основные миры открыты</span>
         </div>
-        <div class="world-blob-map" aria-label="Карта миров">
+        <div class="world-blob-map ${canShowWorld(worlds.find((w)=>w.id==='vocabulary')) ? '' : 'vocab-not-yet-visible'}" aria-label="Карта миров">
           ${allWorlds.map(renderWorldMapButtonV29).join('')}
+          ${canShowWorld(worlds.find((w)=>w.id==='vocabulary')) ? '' : '<span class="vocab-hidden-cover" aria-hidden="true"></span>'}
           <span class="map-cloud cloud-one">☁️</span>
           <span class="map-cloud cloud-two">☁️</span>
           <span class="map-cloud cloud-three">☁️</span>
@@ -3047,7 +3060,8 @@ document.addEventListener("DOMContentLoaded", render);
     if (state.selectedScene) return renderSceneScreen();
     if (!state.selectedWorldId || state.selectedWorldId === 'map') return renderMapHomeV29();
     const visibleWorlds = worlds.filter(canShowWorld);
-    const selectedWorld = visibleWorlds.find((world)=>world.id===state.selectedWorldId) || worlds.find((world)=>world.id===state.selectedWorldId);
+    const selectedWorld = visibleWorlds.find((world)=>world.id===state.selectedWorldId);
+    if (!selectedWorld) { state.selectedWorldId = 'map'; return renderMapHomeV29(); }
     return renderSelectedWorldV29(selectedWorld);
   }
 
@@ -3106,6 +3120,7 @@ document.addEventListener("DOMContentLoaded", render);
   };
 
   document.addEventListener('DOMContentLoaded', ()=>{
+    applyEmbeddedUiAssets();
     if (!state.selectedScene && !state.sceneCompletedView) state.selectedWorldId = 'map';
     render();
   });
